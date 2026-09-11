@@ -3,4 +3,7 @@
 	url = https://github.com/yuliskov/SharedModules
 [submodule "MediaServiceCore"]
 	path = MediaServiceCore
-	url = https://github.com/yuliskov/MediaServiceCore
+	# Fork carrying datasyncIdToken (a stable account id). Repoint at
+	# yuliskov/MediaServiceCore if that lands upstream.
+	url = https://github.com/gregzuro/MediaServiceCore
+	branch = feat/datasync-id-token
