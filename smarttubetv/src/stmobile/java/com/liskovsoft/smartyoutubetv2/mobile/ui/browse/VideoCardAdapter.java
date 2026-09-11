@@ -1,5 +1,6 @@
 package com.liskovsoft.smartyoutubetv2.mobile.ui.browse;
 
+import android.text.TextUtils;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -118,8 +119,11 @@ public class VideoCardAdapter extends RecyclerView.Adapter<VideoCardAdapter.View
 
         Video video = mVideos.get(position);
         holder.title.setText(video.getTitle());
+        // Second title is "Channel • 1.2M views • 3 days ago" — getAuthor() drops the views and
+        // date, so show the whole thing (same as UpNextRowAdapter) and fall back when it's empty.
+        CharSequence subtitle = video.getSecondTitle();
         String author = video.getAuthor();
-        holder.author.setText(author != null ? author : "");
+        holder.author.setText(TextUtils.isEmpty(subtitle) ? (author != null ? author : "") : subtitle);
 
         // Duration/length badge overlaid on the thumbnail (YouTube-style). video.badge holds
         // the duration text ("12:34") for normal videos and occasionally a label ("LIVE").
