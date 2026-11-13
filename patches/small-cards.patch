@@ -1,0 +1,36 @@
+diff --git a/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/mobile/ui/browse/MobileBrowseFragment.java b/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/mobile/ui/browse/MobileBrowseFragment.java
+index facefde39..4f74a90e5 100644
+--- a/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/mobile/ui/browse/MobileBrowseFragment.java
++++ b/smarttubetv/src/stmobile/java/com/liskovsoft/smartyoutubetv2/mobile/ui/browse/MobileBrowseFragment.java
+@@ -128,7 +128,7 @@ public class MobileBrowseFragment extends Fragment implements BrowseView, MediaS
+         int screenWidth = getResources().getDisplayMetrics().widthPixels;
+         mGridSpan = getResources().getInteger(R.integer.mobile_grid_span);
+         mGridCardWidth = screenWidth / mGridSpan;
+-        mShelfCardWidth = (int) (screenWidth * 0.42f);
++        mShelfCardWidth = screenWidth * getResources().getInteger(R.integer.mobile_shelf_width_percent) / 100;
+ 
+         mSectionAdapter = new SectionAdapter(this::onSectionPicked);
+         RecyclerView sectionList = view.findViewById(R.id.section_list);
+diff --git a/smarttubetv/src/stmobile/res/values-land/integers.xml b/smarttubetv/src/stmobile/res/values-land/integers.xml
+new file mode 100644
+index 000000000..acbda6504
+--- /dev/null
++++ b/smarttubetv/src/stmobile/res/values-land/integers.xml
+@@ -0,0 +1,6 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!-- gregzuro patch: smaller cards on phones in landscape. -->
++<resources>
++    <integer name="mobile_grid_span">4</integer>
++    <integer name="mobile_shelf_width_percent">24</integer>
++</resources>
+diff --git a/smarttubetv/src/stmobile/res/values/integers.xml b/smarttubetv/src/stmobile/res/values/integers.xml
+index e15b9f11c..2885b0e4f 100644
+--- a/smarttubetv/src/stmobile/res/values/integers.xml
++++ b/smarttubetv/src/stmobile/res/values/integers.xml
+@@ -8,4 +8,6 @@
+ -->
+ <resources>
+     <integer name="mobile_grid_span">2</integer>
++    <!-- Home shelf card width as a percent of screen width (gregzuro patch). -->
++    <integer name="mobile_shelf_width_percent">42</integer>
+ </resources>

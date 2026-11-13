@@ -1,0 +1,123 @@
+# gregzuro fork: build each CodeSculptor/SmarterTube release with patches/*.patch applied,
+# sign it with this fork's own key, and publish it as a release here (tracked by Obtainium).
+#
+# Runs daily; does nothing if the latest upstream release has already been built.
+# Manual run: Actions > "gregzuro release" > Run workflow (optionally give a tag, or force a rebuild).
+#
+# Required repo secrets:
+#   KEYSTORE_P12_BASE64  base64 of the PKCS12 signing keystore
+#   KEYSTORE_PASSWORD    keystore (and key) password
+#   KEY_ALIAS            key alias inside the keystore
+name: gregzuro release
+
+on:
+  schedule:
+    - cron: '17 9 * * *'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Upstream tag to build (blank = latest upstream release)'
+        required: false
+      force:
+        description: 'Rebuild even if a release with this tag already exists here'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: gregzuro-release
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      UPSTREAM: CodeSculptor/SmarterTube
+    steps:
+      - name: Pick upstream tag
+        id: tag
+        run: |
+          TAG="${{ github.event.inputs.tag }}"
+          if [ -z "$TAG" ]; then
+            TAG=$(gh release list --repo "$UPSTREAM" --limit 1 --exclude-drafts --json tagName --jq '.[0].tagName')
+          fi
+          [ -n "$TAG" ] || { echo "::error::could not determine upstream tag"; exit 1; }
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 && [ "${{ github.event.inputs.force }}" != "true" ]; then
+            echo "Release $TAG already built here; nothing to do."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Building $TAG"
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout this fork (patches)
+        if: steps.tag.outputs.skip == 'false'
+        uses: actions/checkout@v4
+        with:
+          path: fork
+
+      - name: Checkout upstream at tag
+        if: steps.tag.outputs.skip == 'false'
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.UPSTREAM }}
+          ref: ${{ steps.tag.outputs.tag }}
+          submodules: recursive
+          path: src
+
+      - name: Apply patches
+        if: steps.tag.outputs.skip == 'false'
+        working-directory: src
+        run: |
+          for p in ../fork/patches/*.patch; do
+            echo "Applying $p"
+            git apply --verbose "$p"
+          done
+
+      - uses: actions/setup-java@v4
+        if: steps.tag.outputs.skip == 'false'
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Signing config
+        if: steps.tag.outputs.skip == 'false'
+        working-directory: src
+        env:
+          KEYSTORE_P12_BASE64: ${{ secrets.KEYSTORE_P12_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+        run: |
+          [ -n "$KEYSTORE_P12_BASE64" ] || { echo "::error::KEYSTORE_P12_BASE64 secret missing"; exit 1; }
+          echo "$KEYSTORE_P12_BASE64" | base64 -d > "$RUNNER_TEMP/key.p12"
+          {
+            echo "storeFile=$RUNNER_TEMP/key.p12"
+            echo "storePassword=$KEYSTORE_PASSWORD"
+            echo "keyAlias=$KEY_ALIAS"
+            echo "keyPassword=$KEYSTORE_PASSWORD"
+          } > keystore.properties
+
+      - name: Build
+        if: steps.tag.outputs.skip == 'false'
+        working-directory: src
+        run: |
+          chmod +x gradlew
+          ./gradlew :smarttubetv:assembleStmobileRelease --no-daemon
+          find smarttubetv/build/outputs/apk -name '*.apk' | tee "$RUNNER_TEMP/apks.txt"
+
+      - name: Publish release
+        if: steps.tag.outputs.skip == 'false'
+        run: |
+          TAG="${{ steps.tag.outputs.tag }}"
+          gh release delete "$TAG" --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes >/dev/null 2>&1 || true
+          mapfile -t APKS < <(grep -E 'SmarterTube-.*\.apk$' "$RUNNER_TEMP/apks.txt" | sed 's|^|src/|')
+          [ ${#APKS[@]} -gt 0 ] || { echo "::error::no SmarterTube APKs found"; exit 1; }
+          gh release create "$TAG" "${APKS[@]}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "${{ github.sha }}" \
+            --title "$TAG (gregzuro patched)" \
+            --notes "Upstream ${UPSTREAM} $TAG with patches/*.patch applied (smaller cards in landscape). Signed with the gregzuro key; not interchangeable with upstream builds. Upstream notes: https://github.com/${UPSTREAM}/releases/tag/$TAG"
